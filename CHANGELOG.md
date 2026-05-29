@@ -2,6 +2,14 @@
 
 本项目所有重要变更都记录在本文件中。
 
+## [3.0.2] - 2026-05-29
+
+### 修复
+
+- **macOS：双击运行不再因缺少执行权限而失败。** `run_macos.command` 与 `图片转PPTX.command` 启动时执行 `chmod +x "$0"`（失败静默忽略），首次双击即可运行，无需先在终端手动 `chmod +x`。
+
+> 三套实现（Python / macOS zsh / Windows PowerShell）版本号统一升至 3.0.2。
+
 ## [3.0.1] - 2026-05-29
 
 针对 v3.0.0 代码审查（见 [docs/v3-issues.md](docs/v3-issues.md)）发现的问题做修复。三套实现（Python / macOS zsh / Windows PowerShell）行为保持一致。

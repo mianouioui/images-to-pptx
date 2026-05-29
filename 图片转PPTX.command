@@ -1,6 +1,7 @@
 #!/bin/zsh
-# 图片转PPTX v3.0.1
+# 图片转PPTX v3.0.2
 set -euo pipefail
+chmod +x "$0" >/dev/null 2>&1 || true
 
 SLIDE_WIDTH_EMU=12192000
 SLIDE_HEIGHT_EMU=6858000
