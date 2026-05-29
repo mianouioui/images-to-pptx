@@ -1,5 +1,5 @@
 @echo off
-rem 图片转PPTX v3.0.0
+rem 图片转PPTX v3.0.1
 setlocal
 set "IMG2PPTX_SCRIPT=%~f0"
 set "IMG2PPTX_DIR=%~dp0"
@@ -43,11 +43,6 @@ function Fail {
 function Write-Utf8 {
     param([string]$Path, [string]$Content)
     [System.IO.File]::WriteAllText($Path, $Content, $Utf8NoBom)
-}
-
-function Join-Path2 {
-    param([string]$First, [string]$Second)
-    return [System.IO.Path]::Combine($First, $Second)
 }
 
 function Choose-InputFolder {
@@ -173,7 +168,7 @@ function Get-ImagePlacement {
 }
 
 function Write-StaticParts {
-    param([string]$Work, [int]$SlideCount)
+    param([string]$Work, [int]$SlideCount, [string]$Title)
 
     $slideOverrides = (1..$SlideCount | ForEach-Object {
         "  <Override PartName=`"/ppt/slides/slide$_.xml`" ContentType=`"application/vnd.openxmlformats-officedocument.presentationml.slide+xml`"/>"
@@ -200,7 +195,7 @@ $slideOverrides
 </Types>
 "@
 
-    Write-Utf8 (Join-Path2 $Work "_rels\.rels") @'
+    Write-Utf8 (Join-Path $Work "_rels\.rels") @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/>
@@ -213,7 +208,7 @@ $slideOverrides
         "    <vt:lpstr>Slide $_</vt:lpstr>"
     }) -join "`r`n"
 
-    Write-Utf8 (Join-Path2 $Work "docProps\app.xml") @"
+    Write-Utf8 (Join-Path $Work "docProps\app.xml") @"
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
             xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
@@ -244,14 +239,15 @@ $slideTitles
 "@
 
     $now = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
-    Write-Utf8 (Join-Path2 $Work "docProps\core.xml") @"
+    $titleXml = [System.Security.SecurityElement]::Escape($Title)
+    Write-Utf8 (Join-Path $Work "docProps\core.xml") @"
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
                    xmlns:dc="http://purl.org/dc/elements/1.1/"
                    xmlns:dcterms="http://purl.org/dc/terms/"
                    xmlns:dcmitype="http://purl.org/dc/dcmitype/"
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <dc:title>Images to PPTX</dc:title>
+  <dc:title>$titleXml</dc:title>
   <dc:creator>图片转PPTX-Windows.cmd</dc:creator>
   <cp:lastModifiedBy>图片转PPTX-Windows.cmd</cp:lastModifiedBy>
   <dcterms:created xsi:type="dcterms:W3CDTF">$now</dcterms:created>
@@ -265,7 +261,7 @@ $slideTitles
         "    <p:sldId id=`"$id`" r:id=`"rId$rid`"/>"
     }) -join "`r`n"
 
-    Write-Utf8 (Join-Path2 $Work "ppt\presentation.xml") @"
+    Write-Utf8 (Join-Path $Work "ppt\presentation.xml") @"
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
                 xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -288,7 +284,7 @@ $slideIds
     $viewPropsId = $SlideCount + 3
     $tableStylesId = $SlideCount + 4
 
-    Write-Utf8 (Join-Path2 $Work "ppt\_rels\presentation.xml.rels") @"
+    Write-Utf8 (Join-Path $Work "ppt\_rels\presentation.xml.rels") @"
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>
@@ -299,12 +295,12 @@ $slideRels
 </Relationships>
 "@
 
-    Write-Utf8 (Join-Path2 $Work "ppt\presProps.xml") @'
+    Write-Utf8 (Join-Path $Work "ppt\presProps.xml") @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:presentationPr xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>
 '@
 
-    Write-Utf8 (Join-Path2 $Work "ppt\viewProps.xml") @'
+    Write-Utf8 (Join-Path $Work "ppt\viewProps.xml") @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:viewPr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
           xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
@@ -315,7 +311,7 @@ $slideRels
 </p:viewPr>
 '@
 
-    Write-Utf8 (Join-Path2 $Work "ppt\tableStyles.xml") @'
+    Write-Utf8 (Join-Path $Work "ppt\tableStyles.xml") @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>
 '@
@@ -324,7 +320,7 @@ $slideRels
 function Write-ThemeAndLayouts {
     param([string]$Work)
 
-    Write-Utf8 (Join-Path2 $Work "ppt\slideMasters\slideMaster1.xml") @'
+    Write-Utf8 (Join-Path $Work "ppt\slideMasters\slideMaster1.xml") @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -342,7 +338,7 @@ function Write-ThemeAndLayouts {
 </p:sldMaster>
 '@
 
-    Write-Utf8 (Join-Path2 $Work "ppt\slideMasters\_rels\slideMaster1.xml.rels") @'
+    Write-Utf8 (Join-Path $Work "ppt\slideMasters\_rels\slideMaster1.xml.rels") @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
@@ -350,7 +346,7 @@ function Write-ThemeAndLayouts {
 </Relationships>
 '@
 
-    Write-Utf8 (Join-Path2 $Work "ppt\slideLayouts\slideLayout1.xml") @'
+    Write-Utf8 (Join-Path $Work "ppt\slideLayouts\slideLayout1.xml") @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
              xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -366,14 +362,14 @@ function Write-ThemeAndLayouts {
 </p:sldLayout>
 '@
 
-    Write-Utf8 (Join-Path2 $Work "ppt\slideLayouts\_rels\slideLayout1.xml.rels") @'
+    Write-Utf8 (Join-Path $Work "ppt\slideLayouts\_rels\slideLayout1.xml.rels") @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>
 </Relationships>
 '@
 
-    Write-Utf8 (Join-Path2 $Work "ppt\theme\theme1.xml") @'
+    Write-Utf8 (Join-Path $Work "ppt\theme\theme1.xml") @'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme">
   <a:themeElements>
@@ -435,7 +431,7 @@ function Write-Slide {
         [int64]$Cy
     )
 
-    Write-Utf8 (Join-Path2 $Work "ppt\slides\slide$SlideIndex.xml") @"
+    Write-Utf8 (Join-Path $Work "ppt\slides\slide$SlideIndex.xml") @"
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
        xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -462,7 +458,7 @@ function Write-Slide {
 </p:sld>
 "@
 
-    Write-Utf8 (Join-Path2 $Work "ppt\slides\_rels\slide$SlideIndex.xml.rels") @"
+    Write-Utf8 (Join-Path $Work "ppt\slides\_rels\slide$SlideIndex.xml.rels") @"
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>
@@ -515,7 +511,7 @@ try {
     )
 
     foreach ($dir in $dirs) {
-        New-Item -ItemType Directory -Path (Join-Path2 $work $dir) -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $work $dir) -Force | Out-Null
     }
 
     Write-Host "正在生成 PPTX..."
@@ -524,7 +520,7 @@ try {
     Write-Host ""
     Write-Host "幻灯片顺序："
 
-    Write-StaticParts -Work $work -SlideCount $slideCount
+    Write-StaticParts -Work $work -SlideCount $slideCount -Title ([System.IO.Path]::GetFileNameWithoutExtension($output))
     Write-ThemeAndLayouts -Work $work
 
     $slideIndex = 1
@@ -534,7 +530,7 @@ try {
         $packageName = "image$slideIndex.$extension"
         $placement = Get-ImagePlacement $source
         Write-Host ("  {0:D3}. [{1}] {2}" -f $slideIndex, $number, $source.Name)
-        Copy-Item -LiteralPath $source.FullName -Destination (Join-Path2 $work "ppt\media\$packageName")
+        Copy-Item -LiteralPath $source.FullName -Destination (Join-Path $work "ppt\media\$packageName")
         Write-Slide -Work $work -SlideIndex $slideIndex -PackageName $packageName -X $placement.X -Y $placement.Y -Cx $placement.Cx -Cy $placement.Cy
         $slideIndex++
     }

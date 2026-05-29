@@ -1,5 +1,5 @@
 #!/bin/zsh
-# 图片转PPTX v3.0.0
+# 图片转PPTX v3.0.1
 set -euo pipefail
 
 SLIDE_WIDTH_EMU=12192000
@@ -10,6 +10,7 @@ OPEN=/usr/bin/open
 MKTEMP=/usr/bin/mktemp
 SIPS=/usr/bin/sips
 AWK=/usr/bin/awk
+PERL=/usr/bin/perl
 
 fail() {
   local message="$1"
@@ -20,6 +21,16 @@ fail() {
     -e 'end run' \
     "$message" >/dev/null 2>&1 || true
   exit 1
+}
+
+xml_escape() {
+  local s="$1"
+  s="${s//&/&amp;}"
+  s="${s//</&lt;}"
+  s="${s//>/&gt;}"
+  s="${s//\"/&quot;}"
+  s="${s//\'/&apos;}"
+  print -r -- "$s"
 }
 
 choose_input_folder() {
@@ -53,8 +64,8 @@ unique_output_path() {
 write_static_parts() {
   local work="$1"
   local slide_count="$2"
-  local title="$3"
-  local now
+  local title now
+  title="$(xml_escape "$3")"
   now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
   {
@@ -338,6 +349,67 @@ XML
 XML
 }
 
+exif_orientation() {
+  # 读取 JPEG 的 EXIF 方向标记(1-8)，读不到、出错或缺少 perl 时返回 1。
+  local image_path="$1" result
+  [[ -x "$PERL" ]] || { print -r -- 1; return; }
+  result="$("$PERL" - "$image_path" 2>/dev/null <<'PERL'
+use strict; use warnings;
+my $path = $ARGV[0] // "";
+open(my $fh, "<:raw", $path) or do { print "1\n"; exit };
+my $buf;
+unless (read($fh, $buf, 2) == 2 and $buf eq "\xFF\xD8") { print "1\n"; exit }
+my $orientation = 1;
+my %sof = map { $_ => 1 } (0xC0,0xC1,0xC2,0xC3,0xC5,0xC6,0xC7,0xC9,0xCA,0xCB,0xCD,0xCE,0xCF);
+while (1) {
+    my $b;
+    read($fh, $b, 1) == 1 or last;
+    next if $b ne "\xFF";
+    do { read($fh, $b, 1) == 1 or last; } while ($b eq "\xFF");
+    my $m = ord($b);
+    last if $m == 0xD9;
+    next if $m == 0x01 or ($m >= 0xD0 and $m <= 0xD7);
+    my $lb; read($fh, $lb, 2) == 2 or last;
+    my $len = unpack("n", $lb);
+    last if $len < 2;
+    my $payload = "";
+    if ($len > 2) { read($fh, $payload, $len - 2) == $len - 2 or last; }
+    if ($m == 0xE1) {
+        next if substr($payload, 0, 6) ne "Exif\x00\x00";
+        my $tiff = substr($payload, 6);
+        last if length($tiff) < 8;
+        my $bo = substr($tiff, 0, 2);
+        my ($S, $L);
+        if    ($bo eq "II") { ($S,$L)=("v","V"); }
+        elsif ($bo eq "MM") { ($S,$L)=("n","N"); }
+        else { last; }
+        last if unpack($S, substr($tiff,2,2)) != 0x2A;
+        my $ifd = unpack($L, substr($tiff,4,4));
+        last if $ifd + 2 > length($tiff);
+        my $cnt = unpack($S, substr($tiff,$ifd,2));
+        my $e = $ifd + 2;
+        for (my $i=0; $i<$cnt; $i++) {
+            last if $e + 12 > length($tiff);
+            if (unpack($S, substr($tiff,$e,2)) == 0x0112) {
+                my $v = unpack($S, substr($tiff,$e+8,2));
+                $orientation = ($v>=1 and $v<=8) ? $v : 1;
+                last;
+            }
+            $e += 12;
+        }
+        last;
+    }
+    last if $sof{$m};
+}
+print "$orientation\n";
+PERL
+)"
+  case "$result" in
+    [1-8]) print -r -- "$result" ;;
+    *) print -r -- 1 ;;
+  esac
+}
+
 image_placement() {
   local image_path="$1"
   local info width height pic_x pic_y pic_cx pic_cy
@@ -349,6 +421,15 @@ image_placement() {
 
   if [[ -z "$width" || -z "$height" || "$width" -le 0 || "$height" -le 0 ]]; then
     fail "图片尺寸异常：${image_path:t}"
+  fi
+
+  # sips 报告的是存储像素，不会按 EXIF 方向交换宽高；竖拍照片(方向 5-8)需手动交换。
+  if [[ "${image_path:e:l}" == (jpg|jpeg) ]]; then
+    local orientation swap
+    orientation="$(exif_orientation "$image_path")"
+    case "$orientation" in
+      5|6|7|8) swap="$width"; width="$height"; height="$swap" ;;
+    esac
   fi
 
   if (( width * SLIDE_HEIGHT_EMU > height * SLIDE_WIDTH_EMU )); then

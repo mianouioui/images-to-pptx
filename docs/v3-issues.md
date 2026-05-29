@@ -3,6 +3,23 @@
 > 审查日期：2026-05-29
 > 版本标签：`8497de7` — v3.0.0: 初始提交
 
+## ✅ 修复状态（2026-05-29 跟进）
+
+下列问题已在分支 `claude/silly-lehmann-2a55f6` 修复并验证：
+
+| # | 等级 | 问题 | 状态 |
+|---|------|------|------|
+| 1 | 🔴 | zsh 缺少 EXIF 方向处理 | ✅ 新增 `exif_orientation()`（用 `/usr/bin/perl` 解析 EXIF，缺失时优雅降级为方向 1），方向 5-8 交换宽高；输出占位已验证与 Python 版逐像素一致 |
+| 2 | 🔴 | zsh `core.xml` 标题未转义 | ✅ 新增 `xml_escape()`，含 `& < > " '` 的文件夹名现生成合法 XML（已用特殊字符文件夹端到端验证） |
+| 3 | 🟡 | Python `rglob` 符号链接不一致 | ✅ 改用 `os.walk(followlinks=False)`，跨版本一致且递归时不跟随符号链接目录 |
+| 4 | 🟡 | `ensure_contiguous` 效率 | ✅ 改用集合差集 `sorted(set(range(...)) - numbers)` |
+| 5 | 🟢 | 变量命名 `ignored_numbered` | ✅ 重命名为 `skipped_unnumbered` |
+| 6 | 🟢 | Windows 标题硬编码 | ✅ 改用文件夹名 + `SecurityElement::Escape` 转义 |
+| 7 | 🟢 | PowerShell `Join-Path2` 冗余 | ✅ 移除自定义函数，统一用内置 `Join-Path` |
+| 8 | 🟢 | Python Tab 缩进 | ⚠️ **误报**：文件实际已全部使用 4 空格缩进，无需改动 |
+
+> 验证说明：Python 与 macOS zsh 版均已端到端运行（生成 PPTX 并解析校验占位/XML）；Windows 版因本机无 PowerShell 未能运行，已通过静态检查（圆括号/花括号/here-string 配平、无 `Join-Path2` 残留）确认。
+
 ## 项目概况
 
 项目包含三个功能等价的实现：
@@ -118,9 +135,9 @@ Python 版使用 `output.stem` 作为标题，Windows 版写死固定文本，�
 
 脚本中 `Join-Path`（PowerShell 内置）和 `Join-Path2`（自定义 wrapper）功能完全相同但混用，增加不必要的维护成本。
 
-### 8. Python 缩进风格
+### 8. Python 缩进风格 — ⚠️ 误报（复核后撤销）
 
-Python 文件使用 Tab 缩进，而 PEP 8 推荐 4 空格。不影响运行，但与其他 Python 项目协作时可能不适配编辑器默认设置。
+原结论称 `images_to_pptx.py` 使用 Tab 缩进。复核发现该文件实际已全部使用 4 空格缩进（`grep -cP '^\t'` 计数为 0），不存在 Tab 缩进问题，无需修改。此条为审查时的误判。
 
 ---
 

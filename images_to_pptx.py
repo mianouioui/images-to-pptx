@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -10,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
-__version__ = "3.0.0"
+__version__ = "3.0.1"
 
 SLIDE_WIDTH_EMU = 12192000
 SLIDE_HEIGHT_EMU = 6858000
@@ -157,10 +158,22 @@ def image_placement(width: int, height: int) -> tuple[int, int, int, int]:
     return x, y, cx, cy
 
 
+def iter_candidate_paths(folder: Path, recursive: bool):
+    """遍历待处理的文件。递归模式用 os.walk 且不跟随符号链接目录，与非递归的
+    iterdir() 行为一致，也避免不同 Python 版本 Path.rglob 对符号链接处理的差异。"""
+    if not recursive:
+        yield from folder.iterdir()
+        return
+    for root, _dirs, files in os.walk(folder, followlinks=False):
+        root_path = Path(root)
+        for name in files:
+            yield root_path / name
+
+
 def find_images(folder: Path, recursive: bool) -> list[ImageItem]:
-    paths = folder.rglob("*") if recursive else folder.iterdir()
+    paths = iter_candidate_paths(folder, recursive)
     images: list[tuple[int, Path, str]] = []  # (number, path, suffix)
-    ignored_numbered: list[Path] = []
+    skipped_unnumbered: list[Path] = []
 
     for path in paths:
         if not path.is_file():
@@ -172,12 +185,12 @@ def find_images(folder: Path, recursive: bool) -> list[ImageItem]:
 
         match = TRAILING_NUMBER_RE.search(path.stem)
         if not match:
-            ignored_numbered.append(path)
+            skipped_unnumbered.append(path)
             continue
 
         number = int(match.group(1))
         if number < 1:
-            ignored_numbered.append(path)
+            skipped_unnumbered.append(path)
             continue
 
         images.append((number, path, suffix))
@@ -218,12 +231,12 @@ def find_images(folder: Path, recursive: bool) -> list[ImageItem]:
             )
         )
 
-    if ignored_numbered:
+    if skipped_unnumbered:
         print("已跳过文件名末尾不是数字（至少两位）的图片：", file=sys.stderr)
-        for path in ignored_numbered[:20]:
+        for path in skipped_unnumbered[:20]:
             print(f"  {path.name}", file=sys.stderr)
-        if len(ignored_numbered) > 20:
-            print(f"  ... 还有 {len(ignored_numbered) - 20} 个", file=sys.stderr)
+        if len(skipped_unnumbered) > 20:
+            print(f"  ... 还有 {len(skipped_unnumbered) - 20} 个", file=sys.stderr)
 
     return result
 
@@ -234,13 +247,8 @@ def ensure_contiguous(images: list[ImageItem]) -> None:
     total_missing = (hi - lo + 1) - len(numbers)
     if total_missing <= 0:
         return
-    missing_sample: list[int] = []
-    for number in range(lo, hi + 1):
-        if number not in numbers:
-            missing_sample.append(number)
-            if len(missing_sample) >= 30:
-                break
-    sample = ", ".join(f"{number:03d}" for number in missing_sample)
+    missing = sorted(set(range(lo, hi + 1)) - numbers)
+    sample = ", ".join(f"{number:03d}" for number in missing[:30])
     suffix = "" if total_missing <= 30 else f" ... 还有 {total_missing - 30} 个"
     raise SystemExit(f"strict 模式发现缺失编号：{sample}{suffix}")
 

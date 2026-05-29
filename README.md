@@ -33,13 +33,13 @@ Windows 使用 `图片转PPTX-Windows.cmd`。同样把它放进图片所在文�
 如果 macOS 提示没有执行权限，先在终端运行一次：
 
 ```bash
-chmod +x "/Users/mian/Documents/VS Code/PPT转图片脚本/图片转PPTX.command"
+chmod +x "/Users/mian/Documents/VS Code/图片转PPTX/图片转PPTX.command"
 ```
 
 命令行示例：
 
 ```bash
-cd "/Users/mian/Documents/VS Code/PPT转图片脚本"
+cd "/Users/mian/Documents/VS Code/图片转PPTX"
 python3 images_to_pptx.py /path/to/images --open
 ```
 
