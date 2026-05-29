@@ -35,7 +35,7 @@ Windows 使用 `图片转PPTX-Windows.cmd`。同样把它放进图片所在文�
 命令行示例：
 
 ```bash
-cd "/Users/mian/Documents/VS Code/图片转PPTX"
+cd /path/to/图片转PPTX
 python3 images_to_pptx.py /path/to/images --open
 ```
 
