@@ -30,11 +30,7 @@ Windows 使用 `图片转PPTX-Windows.cmd`。同样把它放进图片所在文�
 
 如果 macOS 第一次提示无法打开，右键点击 `图片转PPTX.command`，选择“打开”，再确认一次即可。
 
-如果 macOS 提示没有执行权限，先在终端运行一次：
-
-```bash
-chmod +x "/Users/mian/Documents/VS Code/图片转PPTX/图片转PPTX.command"
-```
+如果 macOS 提示没有执行权限：脚本运行时会自动尝试赋予自己执行权限，一般无需手动处理；个别情况下可在终端对该 `.command` 文件执行一次 `chmod +x`。
 
 命令行示例：
 
