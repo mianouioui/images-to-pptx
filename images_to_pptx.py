@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
-__version__ = "3.0.2"
+__version__ = "3.0.3"
 
 SLIDE_WIDTH_EMU = 12192000
 SLIDE_HEIGHT_EMU = 6858000

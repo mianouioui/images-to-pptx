@@ -2,6 +2,15 @@
 
 本项目所有重要变更都记录在本文件中。
 
+## [3.0.3] - 2026-05-30
+
+### 变更
+
+- **macOS 实现脚本重命名：`图片转PPTX.command` → `图片转PPTX-macOS.command`。** 与 `图片转PPTX-Windows.cmd` 命名对称，文件名直接标明平台。脚本内写入 PPTX 元数据的 `<Application>`／`<dc:creator>`／`<cp:lastModifiedBy>` 三个字段同步更新为新文件名。
+- **删除入口脚本 `run_macos.command`。** 它仅是转发到 macOS 实现脚本的 5 行壳脚本，无任何文件/代码引用；macOS 用户现在直接双击 `图片转PPTX-macOS.command` 即可，与 Windows 用法一致。
+
+> 三套实现（Python / macOS zsh / Windows PowerShell）版本号统一升至 3.0.3；本次为文件整理，无功能变化。
+
 ## [3.0.2] - 2026-05-29
 
 ### 修复

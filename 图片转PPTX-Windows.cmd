@@ -1,5 +1,5 @@
 @echo off
-rem 图片转PPTX v3.0.2
+rem 图片转PPTX v3.0.3
 setlocal
 set "IMG2PPTX_SCRIPT=%~f0"
 set "IMG2PPTX_DIR=%~dp0"

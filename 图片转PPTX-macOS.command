@@ -1,5 +1,5 @@
 #!/bin/zsh
-# 图片转PPTX v3.0.2
+# 图片转PPTX v3.0.3
 set -euo pipefail
 chmod +x "$0" >/dev/null 2>&1 || true
 
@@ -106,7 +106,7 @@ XML
     print -r -- '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     print -r -- '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"'
     print -r -- '            xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">'
-    print -r -- '  <Application>图片转PPTX.command</Application>'
+    print -r -- '  <Application>图片转PPTX-macOS.command</Application>'
     print -r -- '  <PresentationFormat>On-screen Show (16:9)</PresentationFormat>'
     print -r -- "  <Slides>${slide_count}</Slides>"
     print -r -- '  <Notes>0</Notes>'
@@ -141,8 +141,8 @@ XML
                    xmlns:dcmitype="http://purl.org/dc/dcmitype/"
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <dc:title>${title}</dc:title>
-  <dc:creator>图片转PPTX.command</dc:creator>
-  <cp:lastModifiedBy>图片转PPTX.command</cp:lastModifiedBy>
+  <dc:creator>图片转PPTX-macOS.command</dc:creator>
+  <cp:lastModifiedBy>图片转PPTX-macOS.command</cp:lastModifiedBy>
   <dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created>
   <dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified>
 </cp:coreProperties>

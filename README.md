@@ -20,7 +20,7 @@
 
 ## 推荐用法：双击运行
 
-macOS 使用 `图片转PPTX.command`。最简单的用法是把它放进图片所在文件夹，然后双击运行。它会直接处理同一个文件夹里的图片，生成完成后会自动打开 PPTX。
+macOS 使用 `图片转PPTX-macOS.command`。最简单的用法是把它放进图片所在文件夹，然后双击运行。它会直接处理同一个文件夹里的图片，生成完成后会自动打开 PPTX。
 
 Windows 使用 `图片转PPTX-Windows.cmd`。同样把它放进图片所在文件夹，然后双击运行即可。
 
@@ -28,7 +28,7 @@ Windows 使用 `图片转PPTX-Windows.cmd`。同样把它放进图片所在文�
 
 这两个文件都不需要安装 Python，也不需要额外配置环境。电脑上有 Microsoft 365 或 LibreOffice 就可以打开生成结果。
 
-如果 macOS 第一次提示无法打开，右键点击 `图片转PPTX.command`，选择“打开”，再确认一次即可。
+如果 macOS 第一次提示无法打开，右键点击 `图片转PPTX-macOS.command`，选择“打开”，再确认一次即可。
 
 如果 macOS 提示没有执行权限：脚本运行时会自动尝试赋予自己执行权限，一般无需手动处理；个别情况下可在终端对该 `.command` 文件执行一次 `chmod +x`。
 
@@ -47,7 +47,7 @@ python3 images_to_pptx.py /path/to/images --dry-run
 
 ## 说明
 
-- `图片转PPTX.command` 是 macOS 可直接执行的单文件版本，推荐放进图片文件夹后双击。
+- `图片转PPTX-macOS.command` 是 macOS 可直接执行的单文件版本，推荐放进图片文件夹后双击。
 - `图片转PPTX-Windows.cmd` 是 Windows 可直接执行的单文件版本，推荐放进图片文件夹后双击。
 - 默认输出到图片文件夹内，文件名是 `图片文件夹名.pptx`。
 - 如果输出文件已经存在，脚本会自动生成 `_2`、`_3` 这类新文件名。
