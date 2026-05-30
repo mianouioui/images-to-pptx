@@ -1,5 +1,5 @@
 @echo off
-rem 图片转PPTX v3.1.0
+rem 图片转PPTX v3.2.0
 setlocal
 set "IMG2PPTX_SCRIPT=%~f0"
 set "IMG2PPTX_INPUT=%~1"
@@ -12,7 +12,7 @@ $ErrorActionPreference = "Stop"
 
 [void][System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")
 
-$Version = "3.1.0"
+$Version = "3.2.0"
 $SlideWidthEmu = 12192000
 $SlideHeightEmu = 6858000
 $Utf8NoBom = New-Object System.Text.UTF8Encoding $false
@@ -92,6 +92,24 @@ function Scan-Images {
         else {
             $skipped.Add($file.Name) | Out-Null
         }
+    }
+
+    # 没有符合编号规则的图片时，回退为按文件修改时间排序
+    if ($numbers.Count -eq 0 -and $skipped.Count -gt 0) {
+        Write-Host "未找到符合编号规则的图片，按文件修改时间排序。"
+
+        $allFiles = Get-ChildItem -LiteralPath $InputDir -File |
+            Where-Object { $extensions -contains $_.Extension.ToLowerInvariant() } |
+            Sort-Object LastWriteTime
+
+        $index = 1
+        foreach ($file in $allFiles) {
+            $key = "{0:D3}" -f $index
+            $byNumber[$key] = $file
+            $numbers.Add($key) | Out-Null
+            $index++
+        }
+        $skipped.Clear()
     }
 
     return [PSCustomObject]@{
@@ -460,8 +478,8 @@ function Show-InteractiveBanner {
     2. 按回车
 
   规则：
-    · 只挑文件名末尾 2 位及以上数字的 JPG/PNG（例 01、001、1234）
-    · 按末尾数字从小到大排序
+    · 优先按文件名末尾数字（2 位及以上）从小到大排序
+    · 没有符合编号规则的图片时，自动按文件修改时间排序
     · 拖一张就够——会自动收集它所在文件夹里的所有图片
     · 生成的 PPTX 就放在那个图片文件夹里
     · 退出可按 Ctrl+C
@@ -547,7 +565,7 @@ function Read-InteractiveInputDir {
 
         $scan = Scan-Images $resolved
         if ($scan.Numbers.Count -eq 0) {
-            Write-Host "  这个文件夹里没有文件名末尾 2 位及以上数字的 JPG/PNG："
+            Write-Host "  这个文件夹里没有 JPG/PNG 图片："
             Write-Host "     $resolved"
             Write-Host "     换一张图片或另一个文件夹再拖。"
             Write-Host ""
@@ -582,7 +600,7 @@ try {
     $scan = Scan-Images $inputDir
 
     if ($scan.Numbers.Count -eq 0) {
-        Fail "没有找到文件名以两位及以上数字结尾的 JPG/PNG 图片。"
+        Fail "没有找到 JPG/PNG 图片。"
     }
 
     $sortedNumbers = $scan.Numbers | Sort-Object { [int64]$_ }

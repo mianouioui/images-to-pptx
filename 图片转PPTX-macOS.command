@@ -1,9 +1,9 @@
 #!/bin/zsh
-# 图片转PPTX v3.1.0
+# 图片转PPTX v3.2.0
 set -euo pipefail
 chmod +x "$0" >/dev/null 2>&1 || true
 
-VERSION=3.1.0
+VERSION=3.2.0
 SLIDE_WIDTH_EMU=12192000
 SLIDE_HEIGHT_EMU=6858000
 ZIP=/usr/bin/zip
@@ -471,6 +471,22 @@ scan_images() {
       skipped+=("${image_path:t}")
     fi
   done
+
+  # 没有符合编号规则的图片时，回退为按文件修改时间排序（最旧的在前）
+  if [[ ${#numbers[@]} -eq 0 && ${#skipped[@]} -gt 0 ]]; then
+    print -r -- "未找到符合编号规则的图片，按文件修改时间排序。" >&2
+    local -a time_sorted index
+    time_sorted=("${(@f)$(print -l -- "$scan_dir"/*.(jpg|jpeg|png)(.Nom) 2>/dev/null)}")
+    index=1
+    local image_path
+    for image_path in "${time_sorted[@]}"; do
+      number="$(printf "%03d" "$index")"
+      by_number[$number]="$image_path"
+      numbers+=("$number")
+      index=$((index + 1))
+    done
+    skipped=()
+  fi
 }
 
 print_interactive_banner() {
@@ -485,8 +501,8 @@ print_interactive_banner() {
     2. 按回车
 
   规则：
-    · 只挑文件名末尾 2 位及以上数字的 JPG/PNG（例 01、001、1234）
-    · 按末尾数字从小到大排序
+    · 优先按文件名末尾数字（2 位及以上）从小到大排序
+    · 没有符合编号规则的图片时，自动按文件修改时间排序
     · 拖一张就够——会自动收集它所在文件夹里的所有图片
     · 生成的 PPTX 就放在那个图片文件夹里
     · 退出可按 Ctrl+C
@@ -554,7 +570,7 @@ prompt_input_dir() {
 
     scan_images "$resolved"
     if [[ ${#numbers[@]} -eq 0 ]]; then
-      print -r -- "  这个文件夹里没有文件名末尾 2 位及以上数字的 JPG/PNG："
+      print -r -- "  这个文件夹里没有 JPG/PNG 图片："
       print -r -- "     $resolved"
       print -r -- "     换一张图片或另一个文件夹再拖。"
       print -r -- ""
@@ -585,7 +601,7 @@ fi
 scan_images "$input_dir"
 
 if [[ ${#numbers[@]} -eq 0 ]]; then
-  fail "没有找到文件名以两位及以上数字结尾的 JPG/PNG 图片。"
+  fail "没有找到 JPG/PNG 图片。"
 fi
 
 numbers=("${(@on)numbers}")

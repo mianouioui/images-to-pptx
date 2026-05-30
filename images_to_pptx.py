@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
-__version__ = "3.1.0"
+__version__ = "3.2.0"
 
 SLIDE_WIDTH_EMU = 12192000
 SLIDE_HEIGHT_EMU = 6858000
@@ -196,6 +196,15 @@ def find_images(folder: Path, recursive: bool) -> list[ImageItem]:
 
         images.append((number, path, suffix))
 
+    # 没有符合编号规则的图片时，回退为按文件修改时间排序
+    if not images and skipped_unnumbered:
+        print("未找到符合编号规则的图片，按文件修改时间排序。", file=sys.stderr)
+        skipped_unnumbered.sort(key=lambda p: p.stat().st_mtime)
+        for index, path in enumerate(skipped_unnumbered, start=1):
+            suffix = path.suffix.lower()
+            images.append((index, path, suffix))
+        skipped_unnumbered.clear()
+
     images.sort(key=lambda item: (item[0], item[1].name.lower()))
 
     seen: dict[int, Path] = {}
@@ -242,14 +251,11 @@ def find_images(folder: Path, recursive: bool) -> list[ImageItem]:
     return result
 
 
-def has_numbered_images(folder: Path, recursive: bool) -> bool:
+def has_any_images(folder: Path, recursive: bool) -> bool:
     for path in iter_candidate_paths(folder, recursive):
         if not path.is_file():
             continue
-        if path.suffix.lower() not in SUPPORTED_SUFFIXES:
-            continue
-        match = TRAILING_NUMBER_RE.search(path.stem)
-        if match and int(match.group(1)) >= 1:
+        if path.suffix.lower() in SUPPORTED_SUFFIXES:
             return True
     return False
 
@@ -711,8 +717,8 @@ INTERACTIVE_BANNER = """\
     2. 按回车
 
   规则：
-    · 只挑文件名末尾 2 位及以上数字的 JPG/PNG（例 01、001、1234）
-    · 按末尾数字从小到大排序
+    · 优先按文件名末尾数字（2 位及以上）从小到大排序
+    · 没有符合编号规则的图片时，自动按文件修改时间排序
     · 拖一张就够——会自动收集它所在文件夹里的所有图片
     · 生成的 PPTX 就放在那个图片文件夹里
     · 退出可按 Ctrl+C
@@ -776,13 +782,13 @@ def prompt_for_folder() -> Path | None:
             print(f"  ✗ 读不到这个路径：{raw}\n")
             continue
         try:
-            has_images = has_numbered_images(folder, recursive=False)
+            has_images = has_any_images(folder, recursive=False)
         except OSError:
             print(f"  ✗ 没有权限读取这个文件夹：{folder}\n")
             continue
         if not has_images:
             print(
-                "  ✗ 这个文件夹里没有文件名末尾 2 位及以上数字的 JPG/PNG：\n"
+                "  ✗ 这个文件夹里没有 JPG/PNG 图片：\n"
                 f"     {folder}\n"
                 "     换一张图片或另一个文件夹再拖。\n"
             )
@@ -810,7 +816,7 @@ def _open_file(path: Path) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="把按文件名末尾数字（两位及以上，如 01、001、1234）命名的 JPG/PNG 图片快速合成为 16:9 PPTX。"
+        description="把 JPG/PNG 图片快速合成为 16:9 PPTX。优先按文件名末尾数字排序，无编号时按文件修改时间排序。"
     )
     parser.add_argument(
         "input_folder",
@@ -890,7 +896,7 @@ def main() -> int:
 
     images = find_images(input_folder, args.recursive)
     if not images:
-        print("没有找到文件名以两位及以上数字结尾的 JPG/PNG 图片。", file=sys.stderr)
+        print("没有找到 JPG/PNG 图片。", file=sys.stderr)
         return 1
 
     if args.strict:
