@@ -1,8 +1,7 @@
 @echo off
-rem 图片转PPTX v3.0.3
+rem 图片转PPTX v3.1.0
 setlocal
 set "IMG2PPTX_SCRIPT=%~f0"
-set "IMG2PPTX_DIR=%~dp0"
 set "IMG2PPTX_INPUT=%~1"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -Command "$script=[IO.File]::ReadAllText($env:IMG2PPTX_SCRIPT,[Text.Encoding]::UTF8); $parts=[regex]::Split($script,'(?m)^# POWERSHELL_START\r?$',2); if($parts.Count -lt 2){throw 'PowerShell section missing'}; iex $parts[1]"
 set "exitCode=%ERRORLEVEL%"
@@ -11,48 +10,30 @@ exit /b %exitCode%
 # POWERSHELL_START
 $ErrorActionPreference = "Stop"
 
-[void][System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
 [void][System.Reflection.Assembly]::LoadWithPartialName("System.Drawing")
 
+$Version = "3.1.0"
 $SlideWidthEmu = 12192000
 $SlideHeightEmu = 6858000
 $Utf8NoBom = New-Object System.Text.UTF8Encoding $false
 
-function Show-Message {
-    param(
-        [string]$Title,
-        [string]$Message,
-        [System.Windows.Forms.MessageBoxIcon]$Icon = [System.Windows.Forms.MessageBoxIcon]::Information
-    )
-    [System.Windows.Forms.MessageBox]::Show(
-        $Message,
-        $Title,
-        [System.Windows.Forms.MessageBoxButtons]::OK,
-        $Icon
-    ) | Out-Null
+try {
+    [Console]::OutputEncoding = $Utf8NoBom
+    [Console]::InputEncoding = $Utf8NoBom
+    $OutputEncoding = $Utf8NoBom
 }
+catch {}
 
 function Fail {
     param([string]$Message)
     Write-Host ""
     Write-Host $Message
-    Show-Message -Title "图片转PPTX失败" -Message $Message -Icon ([System.Windows.Forms.MessageBoxIcon]::Error)
     exit 1
 }
 
 function Write-Utf8 {
     param([string]$Path, [string]$Content)
     [System.IO.File]::WriteAllText($Path, $Content, $Utf8NoBom)
-}
-
-function Choose-InputFolder {
-    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-    $dialog.Description = "请选择包含数字结尾（至少两位）图片的文件夹"
-    $dialog.ShowNewFolderButton = $false
-    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-        return $dialog.SelectedPath
-    }
-    exit 0
 }
 
 function Get-UniqueOutputPath {
@@ -467,17 +448,131 @@ function Write-Slide {
 "@
 }
 
+function Show-InteractiveBanner {
+    $banner = @"
+============================================================
+  图片转 PPTX   v$Version
+============================================================
+  把一组图片合成为一个 16:9 的 PPTX 演示文稿。
+
+  怎么用：
+    1. 把任意一张图片拖到这个窗口里（拖文件夹也行）
+    2. 按回车
+
+  规则：
+    · 只挑文件名末尾 2 位及以上数字的 JPG/PNG（例 01、001、1234）
+    · 按末尾数字从小到大排序
+    · 拖一张就够——会自动收集它所在文件夹里的所有图片
+    · 生成的 PPTX 就放在那个图片文件夹里
+    · 退出可按 Ctrl+C
+------------------------------------------------------------
+"@
+    Write-Host $banner
+}
+
+function Get-FirstDroppedPath {
+    param([string]$Line)
+
+    if ([string]::IsNullOrWhiteSpace($Line)) {
+        return $null
+    }
+
+    $trimmed = $Line.Trim()
+    $quote = $trimmed[0]
+    if ($quote -eq '"' -or $quote -eq "'") {
+        $end = $trimmed.IndexOf($quote, 1)
+        if ($end -gt 0) {
+            return $trimmed.Substring(1, $end - 1)
+        }
+    }
+
+    return ($trimmed -split "\s+", 2)[0]
+}
+
+function Resolve-InputDir {
+    param([string]$RawPath)
+
+    if ([string]::IsNullOrWhiteSpace($RawPath)) {
+        return $null
+    }
+
+    $expanded = [Environment]::ExpandEnvironmentVariables($RawPath.Trim())
+    if ($expanded -eq "~") {
+        $expanded = $HOME
+    }
+    elseif ($expanded.StartsWith("~\")) {
+        $expanded = Join-Path $HOME ($expanded.Substring(2))
+    }
+
+    try {
+        $full = [System.IO.Path]::GetFullPath($expanded)
+    }
+    catch {
+        return $null
+    }
+
+    if (Test-Path -LiteralPath $full -PathType Container) {
+        return $full
+    }
+    if (Test-Path -LiteralPath $full -PathType Leaf) {
+        return [System.IO.Path]::GetDirectoryName($full)
+    }
+    return $null
+}
+
+function Read-InteractiveInputDir {
+    Show-InteractiveBanner
+
+    while ($true) {
+        [Console]::Write("把图片拖到这里，然后按回车：")
+        $line = [Console]::ReadLine()
+        if ($null -eq $line) {
+            Write-Host ""
+            return $null
+        }
+
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            Write-Host "  还没有收到路径，请拖入一张图片或一个文件夹。"
+            Write-Host ""
+            continue
+        }
+
+        $raw = Get-FirstDroppedPath $line
+        $resolved = Resolve-InputDir $raw
+        if ([string]::IsNullOrWhiteSpace($resolved)) {
+            Write-Host "  读不到这个路径：$raw"
+            Write-Host ""
+            continue
+        }
+
+        $scan = Scan-Images $resolved
+        if ($scan.Numbers.Count -eq 0) {
+            Write-Host "  这个文件夹里没有文件名末尾 2 位及以上数字的 JPG/PNG："
+            Write-Host "     $resolved"
+            Write-Host "     换一张图片或另一个文件夹再拖。"
+            Write-Host ""
+            continue
+        }
+
+        return $resolved
+    }
+}
+
 try {
-    $scriptDir = [System.IO.Path]::GetFullPath($env:IMG2PPTX_DIR)
     $inputDir = $env:IMG2PPTX_INPUT
-    $usedScriptFolder = $false
 
     if ([string]::IsNullOrWhiteSpace($inputDir)) {
-        $inputDir = $scriptDir
-        $usedScriptFolder = $true
+        $inputDir = Read-InteractiveInputDir
+        if ([string]::IsNullOrWhiteSpace($inputDir)) {
+            exit 0
+        }
     }
     else {
-        $inputDir = [System.IO.Path]::GetFullPath($inputDir)
+        $rawInput = $inputDir
+        $inputDir = Resolve-InputDir $rawInput
+        if ([string]::IsNullOrWhiteSpace($inputDir)) {
+            Fail "输入路径不是图片或文件夹：$rawInput"
+        }
     }
 
     if (-not (Test-Path -LiteralPath $inputDir -PathType Container)) {
@@ -485,10 +580,6 @@ try {
     }
 
     $scan = Scan-Images $inputDir
-    if ($scan.Numbers.Count -eq 0 -and $usedScriptFolder) {
-        $inputDir = Choose-InputFolder
-        $scan = Scan-Images $inputDir
-    }
 
     if ($scan.Numbers.Count -eq 0) {
         Fail "没有找到文件名以两位及以上数字结尾的 JPG/PNG 图片。"
@@ -551,8 +642,9 @@ try {
     Write-Host ""
     Write-Host "完成：$output"
     Write-Host "共 $slideCount 页，图片保持原始比例居中放置。"
-    Start-Process -FilePath $output
-    Show-Message -Title "图片转PPTX完成" -Message "已生成 $slideCount 页 PPTX，图片未拉伸。`n`n$output"
+    if ($env:IMG2PPTX_NO_OPEN -ne "1") {
+        Start-Process -FilePath $output
+    }
 }
 catch {
     try {

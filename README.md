@@ -18,25 +18,43 @@
 
 注意：`01` 和 `001` 会被视为同一页编号，不能同时存在。
 
-## 推荐用法：双击运行
+## 推荐用法：拖入终端
 
-macOS 使用 `图片转PPTX-macOS.command`。最简单的用法是把它放进图片所在文件夹，然后双击运行。它会直接处理同一个文件夹里的图片，生成完成后会自动打开 PPTX。
+macOS 双击 `图片转PPTX-macOS.command`。
 
-Windows 使用 `图片转PPTX-Windows.cmd`。同样把它放进图片所在文件夹，然后双击运行即可。
+Windows 双击 `图片转PPTX-Windows.cmd`。
 
-如果双击时脚本所在文件夹里没有符合规则的图片，它会再弹窗让你手动选择图片文件夹。
+脚本启动后会显示终端引导：
 
-这两个文件都不需要安装 Python，也不需要额外配置环境。电脑上有 Microsoft 365 或 LibreOffice 就可以打开生成结果。
+1. 把任意一张图片拖到终端窗口里，拖文件夹也可以。
+2. 按回车。
+3. 工具会自动收集那张图片所在文件夹里的所有合规图片，并在同一文件夹生成 PPTX。
 
-如果 macOS 第一次提示无法打开，右键点击 `图片转PPTX-macOS.command`，选择“打开”，再确认一次即可。
+脚本不需要放进图片文件夹。拖一张图就够；如果一次拖入多张，只会用第一张来定位图片文件夹。
+
+这两个平台脚本都不需要安装 Python，也不需要额外配置环境。电脑上有 Microsoft 365、PowerPoint、Keynote 或 LibreOffice 就可以打开生成结果。
+
+## 权限提醒
+
+macOS 第一次运行 `.command` 文件时，可能会提示来自未识别开发者，或需要授权访问桌面、文稿、下载等文件夹。可以在“系统设置 → 隐私与安全性”里允许打开；如果提示无法访问文件夹，请在“文件与文件夹”或“完全磁盘访问权限”里给 Terminal（或你实际启动脚本的应用）授权。
 
 如果 macOS 提示没有执行权限：脚本运行时会自动尝试赋予自己执行权限，一般无需手动处理；个别情况下可在终端对该 `.command` 文件执行一次 `chmod +x`。
 
-命令行示例：
+Windows 如果遇到 SmartScreen 或权限拦截，选择“更多信息 → 仍要运行”。如果图片位于受保护目录、输出失败或提示权限不足，请右键 `图片转PPTX-Windows.cmd`，选择“以管理员身份运行”，或者把图片移到桌面、文档等普通用户目录后再运行。
+
+## 命令行用法
+
+Python 版保留给高级用法。无参数运行会进入同样的拖入式引导：
 
 ```bash
-cd /path/to/图片转PPTX
+python3 images_to_pptx.py
+```
+
+也可以直接传入图片或图片文件夹路径：
+
+```bash
 python3 images_to_pptx.py /path/to/images --open
+python3 images_to_pptx.py /path/to/images/page001.jpg --open
 ```
 
 只检查排序，不生成 PPTX：
@@ -47,8 +65,8 @@ python3 images_to_pptx.py /path/to/images --dry-run
 
 ## 说明
 
-- `图片转PPTX-macOS.command` 是 macOS 可直接执行的单文件版本，推荐放进图片文件夹后双击。
-- `图片转PPTX-Windows.cmd` 是 Windows 可直接执行的单文件版本，推荐放进图片文件夹后双击。
+- `图片转PPTX-macOS.command` 是 macOS 可直接执行的单文件版本。
+- `图片转PPTX-Windows.cmd` 是 Windows 可直接执行的单文件版本。
 - 默认输出到图片文件夹内，文件名是 `图片文件夹名.pptx`。
 - 如果输出文件已经存在，脚本会自动生成 `_2`、`_3` 这类新文件名。
 - 同一个文件夹里不能有重复编号，例如 `cover001.jpg` 和 `page001.png` 同时存在会报错。

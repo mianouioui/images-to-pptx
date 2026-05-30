@@ -1,11 +1,11 @@
 #!/bin/zsh
-# 图片转PPTX v3.0.3
+# 图片转PPTX v3.1.0
 set -euo pipefail
 chmod +x "$0" >/dev/null 2>&1 || true
 
+VERSION=3.1.0
 SLIDE_WIDTH_EMU=12192000
 SLIDE_HEIGHT_EMU=6858000
-OSASCRIPT=/usr/bin/osascript
 ZIP=/usr/bin/zip
 OPEN=/usr/bin/open
 MKTEMP=/usr/bin/mktemp
@@ -16,11 +16,6 @@ PERL=/usr/bin/perl
 fail() {
   local message="$1"
   echo "$message" >&2
-  "$OSASCRIPT" \
-    -e 'on run argv' \
-    -e 'display alert "图片转PPTX失败" message (item 1 of argv)' \
-    -e 'end run' \
-    "$message" >/dev/null 2>&1 || true
   exit 1
 }
 
@@ -32,10 +27,6 @@ xml_escape() {
   s="${s//\"/&quot;}"
   s="${s//\'/&apos;}"
   print -r -- "$s"
-}
-
-choose_input_folder() {
-  "$OSASCRIPT" -e 'POSIX path of (choose folder with prompt "请选择包含数字结尾（至少两位）图片的文件夹")'
 }
 
 unique_output_path() {
@@ -482,31 +473,116 @@ scan_images() {
   done
 }
 
-script_dir="${0:A:h}"
+print_interactive_banner() {
+  cat <<EOF
+============================================================
+  图片转 PPTX   v${VERSION}
+============================================================
+  把一组图片合成为一个 16:9 的 PPTX 演示文稿。
+
+  怎么用：
+    1. 把任意一张图片拖到这个窗口里（拖文件夹也行）
+    2. 按回车
+
+  规则：
+    · 只挑文件名末尾 2 位及以上数字的 JPG/PNG（例 01、001、1234）
+    · 按末尾数字从小到大排序
+    · 拖一张就够——会自动收集它所在文件夹里的所有图片
+    · 生成的 PPTX 就放在那个图片文件夹里
+    · 退出可按 Ctrl+C
+------------------------------------------------------------
+EOF
+}
+
+parse_dropped_path() {
+  local line="$1"
+  local -a tokens
+  tokens=("${(@z)line}")
+  (( ${#tokens[@]} > 0 )) || return 1
+  print -r -- "${(Q)tokens[1]}"
+}
+
+resolve_input_dir() {
+  local raw="$1"
+  local candidate
+
+  [[ -n "${raw//[[:space:]]/}" ]] || return 1
+  if [[ "$raw" == "~" || "$raw" == "~/"* ]]; then
+    raw="${HOME}${raw#\~}"
+  fi
+
+  candidate="${raw:a}"
+  if [[ -d "$candidate" ]]; then
+    print -r -- "$candidate"
+    return 0
+  fi
+  if [[ -f "$candidate" ]]; then
+    print -r -- "${candidate:h}"
+    return 0
+  fi
+  return 1
+}
+
+prompt_input_dir() {
+  local line raw resolved
+
+  print_interactive_banner
+  while true; do
+    print -n -- "把图片拖到这里，然后按回车："
+    if ! IFS= read -r line; then
+      print -r -- ""
+      return 1
+    fi
+
+    if [[ -z "${line//[[:space:]]/}" ]]; then
+      print -r -- "  还没有收到路径，请拖入一张图片或一个文件夹。"
+      print -r -- ""
+      continue
+    fi
+
+    if ! raw="$(parse_dropped_path "$line")"; then
+      print -r -- "  读不到这段输入，请重新拖入。"
+      print -r -- ""
+      continue
+    fi
+
+    if ! resolved="$(resolve_input_dir "$raw")"; then
+      print -r -- "  读不到这个路径：$raw"
+      print -r -- ""
+      continue
+    fi
+
+    scan_images "$resolved"
+    if [[ ${#numbers[@]} -eq 0 ]]; then
+      print -r -- "  这个文件夹里没有文件名末尾 2 位及以上数字的 JPG/PNG："
+      print -r -- "     $resolved"
+      print -r -- "     换一张图片或另一个文件夹再拖。"
+      print -r -- ""
+      continue
+    fi
+
+    input_dir="$resolved"
+    return 0
+  done
+}
+
 input_dir="${1:-}"
-used_script_folder=0
-if [[ -z "$input_dir" ]]; then
-  input_dir="$script_dir"
-  used_script_folder=1
-fi
-
-input_dir="${input_dir:a}"
-[[ -d "$input_dir" ]] || fail "输入路径不是文件夹：$input_dir"
-[[ -x "$ZIP" ]] || fail "这台电脑缺少 zip 命令，无法打包 PPTX。"
-
+interactive=0
 typeset -A by_number
 typeset -a numbers skipped
 
-scan_images "$input_dir"
-
-if [[ ${#numbers[@]} -eq 0 ]]; then
-  if [[ "$used_script_folder" -eq 1 ]]; then
-    input_dir="$(choose_input_folder)" || exit 0
-    input_dir="${input_dir:a}"
-    [[ -d "$input_dir" ]] || fail "输入路径不是文件夹：$input_dir"
-    scan_images "$input_dir"
-  fi
+if [[ -z "$input_dir" ]]; then
+  interactive=1
+  prompt_input_dir || exit 0
+else
+  raw_input="$input_dir"
+  input_dir="$(resolve_input_dir "$raw_input")" || fail "输入路径不是图片或文件夹：$raw_input"
 fi
+
+[[ -d "$input_dir" ]] || fail "输入路径不是文件夹：$input_dir"
+[[ -x "$ZIP" ]] || fail "这台电脑缺少 zip 命令，无法打包 PPTX。"
+
+scan_images "$input_dir"
 
 if [[ ${#numbers[@]} -eq 0 ]]; then
   fail "没有找到文件名以两位及以上数字结尾的 JPG/PNG 图片。"
@@ -554,11 +630,12 @@ print -r -- ""
 print -r -- "完成：$output"
 print -r -- "共 ${slide_count} 页，图片保持原始比例居中放置。"
 
-"$OPEN" "$output" >/dev/null 2>&1 || true
-"$OSASCRIPT" -e "display notification \"已生成 ${slide_count} 页 PPTX，图片未拉伸\" with title \"图片转PPTX完成\"" >/dev/null 2>&1 || true
+if [[ "${IMG2PPTX_NO_OPEN:-0}" != "1" ]]; then
+  "$OPEN" "$output" >/dev/null 2>&1 || true
+fi
 
 print -r -- ""
 print -r -- "可以关闭这个窗口。"
-if [[ -t 0 ]]; then
+if [[ "$interactive" -eq 1 && -t 0 ]]; then
   read -k 1 -s "?按任意键退出..." || true
 fi

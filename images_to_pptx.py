@@ -5,13 +5,14 @@ import argparse
 import html
 import os
 import re
+import shlex
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
-__version__ = "3.0.3"
+__version__ = "3.1.0"
 
 SLIDE_WIDTH_EMU = 12192000
 SLIDE_HEIGHT_EMU = 6858000
@@ -239,6 +240,18 @@ def find_images(folder: Path, recursive: bool) -> list[ImageItem]:
             print(f"  ... 还有 {len(skipped_unnumbered) - 20} 个", file=sys.stderr)
 
     return result
+
+
+def has_numbered_images(folder: Path, recursive: bool) -> bool:
+    for path in iter_candidate_paths(folder, recursive):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in SUPPORTED_SUFFIXES:
+            continue
+        match = TRAILING_NUMBER_RE.search(path.stem)
+        if match and int(match.group(1)) >= 1:
+            return True
+    return False
 
 
 def ensure_contiguous(images: list[ImageItem]) -> None:
@@ -687,6 +700,114 @@ def build_pptx(images: list[ImageItem], output: Path, title: str) -> None:
             pptx.write(image.path, f"ppt/media/{image.package_name}", compress_type=ZIP_STORED)
 
 
+INTERACTIVE_BANNER = """\
+============================================================
+  图片转 PPTX   v{version}
+============================================================
+  把一组图片合成为一个 16:9 的 PPTX 演示文稿。
+
+  怎么用：
+    1. 把任意一张图片拖到这个窗口里（拖文件夹也行）
+    2. 按回车
+
+  规则：
+    · 只挑文件名末尾 2 位及以上数字的 JPG/PNG（例 01、001、1234）
+    · 按末尾数字从小到大排序
+    · 拖一张就够——会自动收集它所在文件夹里的所有图片
+    · 生成的 PPTX 就放在那个图片文件夹里
+    · 退出可按 Ctrl+C
+------------------------------------------------------------"""
+
+
+def parse_dropped_path(line: str) -> str | None:
+    """从用户拖入终端的一行里取出第一个路径。
+
+    macOS/Linux 终端拖入是反斜杠转义或引号包裹的 POSIX 路径；
+    Windows 控制台拖入是（含空格时）双引号包裹的路径。
+    """
+    line = line.strip()
+    if not line:
+        return None
+    if os.name == "nt":
+        quote = line[0]
+        if quote in {'"', "'"}:
+            end = line.find(quote, 1)
+            if end > 0:
+                return line[1:end]
+        parts = line.split()
+        return parts[0] if parts else None
+    try:
+        parts = shlex.split(line, posix=True)
+    except ValueError:
+        return line
+    return parts[0] if parts else None
+
+
+def resolve_input_folder(path: Path) -> Path:
+    candidate = path.expanduser().resolve()
+    if not candidate.exists():
+        raise FileNotFoundError(str(candidate))
+    if candidate.is_dir():
+        return candidate
+    if candidate.is_file():
+        return candidate.parent
+    raise NotADirectoryError(str(candidate))
+
+
+def prompt_for_folder() -> Path | None:
+    """打印新手引导，循环读取拖入的图片/文件夹，返回含图片的文件夹。
+
+    Ctrl+C / EOF 表示退出，返回 None。
+    """
+    print(INTERACTIVE_BANNER.format(version=__version__))
+    while True:
+        try:
+            line = input("把图片拖到这里，然后按回车：")
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return None
+        raw = parse_dropped_path(line)
+        if raw is None:
+            print("  还没有收到路径，请拖入一张图片或一个文件夹。\n")
+            continue
+        try:
+            folder = resolve_input_folder(Path(raw))
+        except (FileNotFoundError, NotADirectoryError, OSError):
+            print(f"  ✗ 读不到这个路径：{raw}\n")
+            continue
+        try:
+            has_images = has_numbered_images(folder, recursive=False)
+        except OSError:
+            print(f"  ✗ 没有权限读取这个文件夹：{folder}\n")
+            continue
+        if not has_images:
+            print(
+                "  ✗ 这个文件夹里没有文件名末尾 2 位及以上数字的 JPG/PNG：\n"
+                f"     {folder}\n"
+                "     换一张图片或另一个文件夹再拖。\n"
+            )
+            continue
+        return folder
+
+
+def _open_file(path: Path) -> None:
+    """用系统默认程序打开生成的文件（跨平台，失败静默忽略）。"""
+    import subprocess
+
+    if os.environ.get("IMG2PPTX_NO_OPEN") == "1":
+        return
+
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(["open", str(path)], check=False)
+        elif os.name == "nt":
+            os.startfile(str(path))  # type: ignore[attr-defined]
+        else:
+            subprocess.run(["xdg-open", str(path)], check=False)
+    except Exception:
+        pass
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="把按文件名末尾数字（两位及以上，如 01、001、1234）命名的 JPG/PNG 图片快速合成为 16:9 PPTX。"
@@ -694,9 +815,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "input_folder",
         nargs="?",
-        default=".",
+        default=None,
         type=Path,
-        help="图片所在文件夹，默认是当前文件夹。",
+        help="图片或图片文件夹路径。省略时进入拖入式交互引导。",
     )
     parser.add_argument(
         "-o",
@@ -727,7 +848,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--open",
         action="store_true",
-        help="生成后用 macOS 默认应用打开 PPTX。",
+        help="生成后用系统默认应用打开 PPTX。",
     )
     parser.add_argument(
         "--version",
@@ -739,14 +860,33 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    input_folder = args.input_folder.expanduser().resolve()
 
-    if not input_folder.exists():
-        print(f"图片文件夹不存在：{input_folder}", file=sys.stderr)
-        return 2
-    if not input_folder.is_dir():
-        print(f"输入路径不是文件夹：{input_folder}", file=sys.stderr)
-        return 2
+    if os.name == "nt":
+        for _stream in (sys.stdout, sys.stderr, sys.stdin):
+            try:
+                _stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
+            except Exception:
+                pass
+
+    interactive = args.input_folder is None
+    if interactive:
+        folder = prompt_for_folder()
+        if folder is None:
+            print("已退出。")
+            return 0
+        input_folder = folder
+    else:
+        try:
+            input_folder = resolve_input_folder(args.input_folder)
+        except FileNotFoundError:
+            print(f"图片或图片文件夹不存在：{args.input_folder}", file=sys.stderr)
+            return 2
+        except NotADirectoryError:
+            print(f"输入路径不是图片或文件夹：{args.input_folder}", file=sys.stderr)
+            return 2
+        except OSError as exc:
+            print(f"无法读取输入路径：{args.input_folder}\n{exc}", file=sys.stderr)
+            return 2
 
     images = find_images(input_folder, args.recursive)
     if not images:
@@ -769,10 +909,14 @@ def main() -> int:
     print(f"\n已生成：{output}")
     print(f"共 {len(images)} 页，16:9 宽屏，图片保持原始比例居中放置。")
 
-    if args.open:
-        import subprocess
+    if args.open or interactive:
+        _open_file(output)
 
-        subprocess.run(["open", str(output)], check=False)
+    if interactive:
+        try:
+            input("\n按回车键退出……")
+        except EOFError:
+            pass
 
     return 0
 
